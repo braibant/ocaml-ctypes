@@ -56,6 +56,7 @@ struct
           let y = e1 in (let x = e2 in e3) *)
        let Ty t = Type_C.ccomp c in
        `Let (ye, (c, t) >>= k)
+     | `Nop -> k (local x ty)
 
   let (>>) c1 c2 = (c1, Void) >>= fun _ -> c2
 

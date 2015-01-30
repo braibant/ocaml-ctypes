@@ -103,6 +103,7 @@ let rec ccomp fmt : ccomp -> unit = function
   | `LetConst (`Local (x, _), `Int c, s) ->
     fprintf fmt "@[enum@ {@[@ %s@ =@ %d@ };@]@]@ %a"
       x c ccomp s
+  | `Nop -> ()
 
 let format_parameter_list parameters k fmt =
   let format_arg fmt (name, Ty t) =
@@ -125,5 +126,5 @@ let cfundec : Format.formatter -> cfundec -> unit =
       `nonarray fmt
 
 let cfundef fmt (`Function (dec, body) : cfundef) =
-  fprintf fmt "%a@\n{@[<v 2>@\n%a@]@\n}@\n" 
+  fprintf fmt "%a@\n{@[<v 2>@\n%a@]@\n}@\n"
     cfundec dec ccomp body
