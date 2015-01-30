@@ -20,6 +20,18 @@ let returning t = Returns t
 
 let value = abstract ~name:"value" ~size:0 ~alignment:0
 
+(* These are configuration options to tweak the generated code in inverted stubs.  *)
+type inverted_stubs_options =
+  {
+    (* will wrap [caml_release_runtime_system] and
+       [caml_acquire_runtime_system] around callbacks.*)
+    use_runtime_system_lock: bool;
+
+    (* will call [caml_c_thread_register] in the prelude of each
+       function. *)
+    use_register_thread: bool;
+  }
+
 module Generate_C =
 struct
   let report_unpassable what =
@@ -29,6 +41,7 @@ struct
   let reader fname fn = { fname; allocates = false; reads_ocaml_heap = true; fn = Fn fn }
   let conser fname fn = { fname; allocates = true; reads_ocaml_heap = false; fn = Fn fn }
   let immediater fname fn = { fname; allocates = false; reads_ocaml_heap = false; fn = Fn fn }
+  let writer fname fn = {fname; allocates = true; reads_ocaml_heap = true; fn = Fn fn}
 
   let local name ty = `Local (name, Ty ty)
 
@@ -36,7 +49,7 @@ struct
    fun (e, ty) k ->
      let x = fresh_var () in
      match e with
-       (* let x = v in e ~> e[x:=v] *) 
+       (* let x = v in e ~> e[x:=v] *)
      | #cexp as v ->
        k v
      | #ceff as e ->
@@ -57,6 +70,9 @@ struct
        let Ty t = Type_C.ccomp c in
        `Let (ye, (c, t) >>= k)
      | `Nop -> k (local x ty)
+     | `Return (Ty ty, v) ->
+       (k v, ty) >>= fun e ->
+       `Return (Type_C.cexp e,e)
 
   let (>>) c1 c2 = (c1, Void) >>= fun _ -> c2
 
@@ -177,7 +193,7 @@ struct
     | Struct s ->
       Some ((of_fatptr x, ptr void) >>= fun y ->
             `Deref (`Cast (Ty (ptr orig), y)))
-    | Union u -> 
+    | Union u ->
       Some ((of_fatptr x, ptr void) >>= fun y ->
             `Deref (`Cast (Ty (ptr orig), y)))
     | Abstract _ -> report_unpassable "values of abstract type"
@@ -225,7 +241,7 @@ struct
                    reads_ocaml_heap = false;
                    fn = Fn f; } in
       let rec body : type a. _ -> a fn -> _ =
-         fun vars -> function 
+         fun vars -> function
          | Returns t ->
            let x = fresh_var () in
            let e, ty = `App (fvar, (List.rev vars :> cexp list)), t in
@@ -234,7 +250,7 @@ struct
          | Function (x, f, t) ->
            begin match prj f (local x value) with
              None -> body vars t
-           | Some projected -> 
+           | Some projected ->
              (projected, f) >>= fun x' ->
              body (x' :: vars) t
            end
@@ -279,7 +295,7 @@ struct
                               local "nargs" int;
                               local "locals" (ptr value)]),
        value) >>= fun x ->
-      (project rtyp x, rtyp) >>= fun y -> 
+      (project rtyp x, rtyp) >>= fun y ->
       `CAMLreturnT (Ty rtyp, y)
     in
     let body =
@@ -310,6 +326,67 @@ struct
                                local "nargs" int) >>
                     body))
 
+  let caml_c_thread_register : cfunction =
+    immediater "caml_c_thread_register" (void @-> returning void)
+
+  let caml_acquire_runtime_system : cfunction =
+    immediater "caml_acquire_runtime_system" (void @-> returning void)
+
+  let caml_release_runtime_system : cfunction =
+    immediater "caml_release_runtime_system" (void @-> returning void)
+
+  let rec sequence = function
+    | [] -> `Nop
+    | t::q -> t >> sequence q
+
+  let inverse_fn_wrapper options ~stub_name f =
+    let `Fundec (_, args, Ty rtyp) as dec = fundec stub_name f in
+    let prelude =
+      [
+        begin if options.use_register_thread
+          then [`App (caml_c_thread_register, [])]
+          else [] end;
+
+        begin if options.use_runtime_system_lock
+          then [`App (caml_acquire_runtime_system, [])]
+          else [] end;
+      ]
+    in
+    let prelude = sequence (List.flatten prelude) in
+
+    let epilogue =
+      begin if options.use_runtime_system_lock
+        then `App (caml_release_runtime_system, [])
+        else `Nop end
+    in
+
+    let f = writer stub_name f in
+
+    let project typ e =
+      match prj typ e with
+        None -> (e :> ccomp)
+      | Some e -> e
+    in
+
+    `Function (dec,
+               prelude >>
+               (let args' = List.map (fun (x, Ty t) -> local x t) args in
+                (`App (f, args'),value) >>= fun result ->
+                epilogue >>
+                ((project rtyp result, rtyp) >>= fun y ->
+                `Return (Ty rtyp, y))
+              ))
+
+  let inverse_fn ~options ~stub_name f =
+    match options with
+    | None -> [inverse_fn ~stub_name f]
+    | Some options ->
+      let wrapped_stub_name = Printf.sprintf "%s_wrapped"  stub_name in
+      let wrapped = inverse_fn ~stub_name:wrapped_stub_name f in
+      let wrapper = inverse_fn_wrapper options ~stub_name f  in
+      [wrapped;wrapper]
+
+
   let value : type a. cname:string -> stub_name:string -> a Static.typ -> cfundef =
     fun ~cname ~stub_name typ ->
       let (e, ty) = (`Addr (`Global { name = cname; typ = Ty typ;
@@ -337,8 +414,9 @@ let value ~cname ~stub_name fmt typ =
   let dec = Generate_C.value ~cname ~stub_name typ in
   Cstubs_emit_c.cfundef fmt dec
 
-let inverse_fn ~stub_name fmt fn : unit =
-  Cstubs_emit_c.cfundef fmt (Generate_C.inverse_fn ~stub_name fn)
+let inverse_fn ?options ~stub_name fmt fn : unit =
+  let defs = Generate_C.inverse_fn ~options ~stub_name fn in
+  List.iter (Cstubs_emit_c.cfundef fmt) defs
 
 let inverse_fn_decl ~stub_name fmt fn =
   Format.fprintf fmt "@[%a@];@\n"
