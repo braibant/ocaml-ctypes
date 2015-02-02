@@ -19,6 +19,28 @@ end
 
 module type BINDINGS = functor (F : INTERNAL) -> sig end
 
+(* C stub generation configuration options *)
+type options = Cstubs_generate_c.inverted_stubs_options
+
+let default_options = Cstubs_generate_c.{
+    use_runtime_system_lock=false;
+    use_register_thread=false;
+  }
+
+let multithreaded_options =
+  Cstubs_generate_c.{
+    use_runtime_system_lock=true;
+    use_register_thread=true;
+  }
+
+let configure_options ?(use_runtime_system_lock=false)
+    ?(use_register_thread=false) =
+  Cstubs_generate_c.{
+    use_runtime_system_lock;
+    use_register_thread;
+  }
+
+
 type fn_info = Fn : string * (_ -> _) Ctypes.fn -> fn_info
 type ty = Ty : _ Ctypes.typ -> ty
 type typedef = Typedef : _ Ctypes.typ * string -> typedef
@@ -68,13 +90,13 @@ value %s(value i, value v)
   CAMLreturn (Val_unit);
 }@\n" register
 
-let c_function fmt (Fn (stub_name, fn)) : unit =
-  Cstubs_generate_c.inverse_fn ~stub_name fmt fn
+let c_function ~options fmt (Fn (stub_name, fn)) : unit =
+  Cstubs_generate_c.inverse_fn ~options ~stub_name fmt fn
 
-let gen_c fmt register infos =
+let gen_c ~options fmt register infos =
   begin
     c_prologue fmt register infos;
-    List.iter (c_function fmt) infos
+    List.iter (c_function ~options fmt) infos
   end
 
 let c_declaration fmt (Fn (stub_name, fn)) : unit =
@@ -87,7 +109,7 @@ let write_enum_declaration fmt (Enum (constants, ty)) =
   Format.fprintf fmt "@[%a@ {@\n@[<v 2>@\n" (fun ty -> Ctypes.format_typ ty) ty;
   let last = List.length constants - 1 in
   List.iteri
-    (fun i (name, value) -> 
+    (fun i (name, value) ->
        (* Trailing commas are not allowed. *)
        if i < last
        then Format.fprintf fmt "@[%s@ =@ %Ld,@]@\n" name value
@@ -107,11 +129,11 @@ let write_declaration fmt = function
   | Decl_typedef t -> write_typedef fmt t
   | Decl_enum e -> write_enum_declaration fmt e
 
-let write_c fmt ~prefix (module B : BINDINGS) : unit =
+let write_c ?(options = default_options) fmt ~prefix (module B : BINDINGS) : unit =
   let register = prefix ^ "_register" in
   let m, decls = collector () in
   let module M = B((val m)) in
-  gen_c fmt register (functions (decls ()));
+  gen_c ~options fmt register (functions (decls ()));
   Format.fprintf fmt "@."
 
 let write_c_header fmt ~prefix (module B : BINDINGS) : unit =
@@ -121,11 +143,11 @@ let write_c_header fmt ~prefix (module B : BINDINGS) : unit =
   Format.fprintf fmt "@."
 
 let gen_ml fmt register (infos : fn_info list) : unit =
-  Format.fprintf fmt 
+  Format.fprintf fmt
     "type 'a fn = 'a@\n@\n";
   Format.fprintf fmt
     "module CI = Cstubs_internals@\n@\n";
-  Format.fprintf fmt 
+  Format.fprintf fmt
     "type 'a name = @\n";
   ListLabels.iter infos
     ~f:(fun (Fn (n, fn)) ->

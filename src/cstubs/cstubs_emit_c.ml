@@ -104,6 +104,9 @@ let rec ccomp fmt : ccomp -> unit = function
     fprintf fmt "@[enum@ {@[@ %s@ =@ %d@ };@]@]@ %a"
       x c ccomp s
   | `Nop -> ()
+  | `Return (ty, e) ->
+    fprintf fmt "@[<2>return(@[%a@])@];"
+      cexp e
 
 let format_parameter_list parameters k fmt =
   let format_arg fmt (name, Ty t) =
