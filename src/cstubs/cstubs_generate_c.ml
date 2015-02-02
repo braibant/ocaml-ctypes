@@ -328,6 +328,9 @@ struct
   let caml_c_thread_register : cfunction =
     immediater "caml_c_thread_register" (void @-> returning void)
 
+  let caml_c_thread_unregister : cfunction =
+    immediater "caml_c_thread_unregister" (void @-> returning void)
+
   let caml_acquire_runtime_system : cfunction =
     immediater "caml_acquire_runtime_system" (void @-> returning void)
 
@@ -343,21 +346,28 @@ struct
     let prelude =
       [
         begin if options.use_register_thread
-          then [`App (caml_c_thread_register, [])]
-          else [] end;
+          then `App (caml_c_thread_register, [])
+          else `Nop end;
 
         begin if options.use_runtime_system_lock
-          then [`App (caml_acquire_runtime_system, [])]
-          else [] end;
+          then `App (caml_acquire_runtime_system, [])
+          else `Nop end;
       ]
     in
-    let prelude = sequence (List.flatten prelude) in
+    let prelude = sequence prelude in
 
     let epilogue =
-      begin if options.use_runtime_system_lock
-        then `App (caml_release_runtime_system, [])
-        else `Nop end
+      [
+        begin if options.use_runtime_system_lock
+          then `App (caml_release_runtime_system, [])
+          else `Nop end;
+
+        begin if options.use_register_thread
+          then `App (caml_c_thread_unregister, [])
+          else `Nop end;
+      ]
     in
+    let epilogue = sequence epilogue in
 
     let f = writer callee_name f in
 
