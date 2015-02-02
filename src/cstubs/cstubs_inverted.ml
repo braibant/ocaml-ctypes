@@ -74,6 +74,8 @@ let format_enum_values fmt infos =
 let c_prologue fmt register infos =
   Format.fprintf fmt "#include <caml/memory.h>@\n";
   Format.fprintf fmt "#include <caml/callback.h>@\n";
+  Format.fprintf fmt "#include <caml/signals.h>@\n";
+  Format.fprintf fmt "#include <caml/threads.h>@\n";
   Format.fprintf fmt "#include \"ctypes/cstubs_internals.h\"@\n@\n";
   Format.fprintf fmt "enum functions@\n{@[<v 2>@ %afn_count@]@\n};"
     format_enum_values infos;
