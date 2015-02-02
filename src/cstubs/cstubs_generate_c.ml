@@ -70,9 +70,8 @@ struct
        let Ty t = Type_C.ccomp c in
        `Let (ye, (c, t) >>= k)
      | `Nop -> k (local x ty)
-     | `Return (Ty ty, v) ->
-       (k v, ty) >>= fun e ->
-       `Return (Type_C.cexp e,e)
+     | `Return (v) -> `Return v
+
 
   let (>>) c1 c2 = (c1, Void) >>= fun _ -> c2
 
@@ -373,9 +372,8 @@ struct
                (let args' = List.map (fun (x, Ty t) -> local x t) args in
                 (`App (f, args'),value) >>= fun result ->
                 epilogue >>
-                ((project rtyp result, rtyp) >>= fun y ->
-                `Return (Ty rtyp, y))
-              ))
+                `Return result)
+              )
 
   let inverse_fn ~options ~stub_name f =
     let callback_name = Printf.sprintf "fn_%s" stub_name in

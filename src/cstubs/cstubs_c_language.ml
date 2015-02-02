@@ -54,7 +54,7 @@ type ccomp = [ ceff
              | `CAMLreturnT of ty * cexp
              | `Let of cbind * ccomp
              | `Nop
-             | `Return of ty * cexp]
+             | `Return of cexp]
 type cfundec = [ `Fundec of string * (string * ty) list * ty ]
 type cfundef = [ `Function of cfundec * ccomp ]
 
@@ -106,5 +106,5 @@ struct
     | `LetConst (_, _, c) -> ccomp c
     | `CAMLreturnT (ty, _) -> ty
     | `Nop -> Ty Void
-    | `Return  (ty, _) -> ty
+    | `Return  (_) -> Ty Void
 end

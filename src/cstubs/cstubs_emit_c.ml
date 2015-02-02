@@ -104,7 +104,7 @@ let rec ccomp fmt : ccomp -> unit = function
     fprintf fmt "@[enum@ {@[@ %s@ =@ %d@ };@]@]@ %a"
       x c ccomp s
   | `Nop -> ()
-  | `Return (ty, e) ->
+  | `Return e ->
     fprintf fmt "@[<2>return(@[%a@])@];"
       cexp e
 
