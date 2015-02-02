@@ -277,16 +277,16 @@ struct
       `Function (`Fundec (bytename, [argv; argc], Ty value),
                  build_call nargs)
 
-  let inverse_fn ~stub_name f =
+  let inverse_fn ~stub_name ~callback_name f =
     let `Fundec (_, args, Ty rtyp) as dec = fundec stub_name f in
-    let idx = local (Printf.sprintf "fn_%s" stub_name) int in
+    let idx = local callback_name int in
     let project typ e =
       match prj typ e with
         None -> (e :> ccomp)
       | Some e -> e
     in
     let call =
-      (* f := functions[fn_name];
+      (* f := functions[callback_name];
          x := caml_callbackN(f, nargs, locals);
          y := T_val(x);
          CAMLreturnT(T, y);    *)
@@ -339,7 +339,7 @@ struct
     | [] -> `Nop
     | t::q -> t >> sequence q
 
-  let inverse_fn_wrapper options ~stub_name f =
+  let inverse_fn_wrapper options ~stub_name ~callee_name f =
     let `Fundec (_, args, Ty rtyp) as dec = fundec stub_name f in
     let prelude =
       [
@@ -360,7 +360,7 @@ struct
         else `Nop end
     in
 
-    let f = writer stub_name f in
+    let f = writer callee_name f in
 
     let project typ e =
       match prj typ e with
@@ -378,12 +378,13 @@ struct
               ))
 
   let inverse_fn ~options ~stub_name f =
+    let callback_name = Printf.sprintf "fn_%s" stub_name in
     match options with
-    | None -> [inverse_fn ~stub_name f]
+    | None -> [inverse_fn ~stub_name ~callback_name f]
     | Some options ->
       let wrapped_stub_name = Printf.sprintf "%s_wrapped"  stub_name in
-      let wrapped = inverse_fn ~stub_name:wrapped_stub_name f in
-      let wrapper = inverse_fn_wrapper options ~stub_name f  in
+      let wrapped = inverse_fn ~stub_name:wrapped_stub_name ~callback_name f in
+      let wrapper = inverse_fn_wrapper options ~stub_name ~callee_name:wrapped_stub_name f  in
       [wrapped;wrapper]
 
 
