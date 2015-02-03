@@ -351,7 +351,7 @@ struct
         begin if options.use_register_thread
           then
             [
-              `App (caml_thread_initialize, []);
+              (* `App (caml_thread_initialize, []); *)
               `App (caml_c_thread_register, [])
             ]
           else [`Nop] end;
