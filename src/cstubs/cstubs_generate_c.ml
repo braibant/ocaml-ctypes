@@ -323,7 +323,10 @@ struct
                   `CAMLparam0 >>
                   `CAMLlocalN (local "locals" (array (List.length args) value),
                                local "nargs" int) >>
-                    body))
+                  body))
+
+  let caml_thread_initialize : cfunction =
+    immediater "caml_thread_initialize" (void @-> returning void)
 
   let caml_c_thread_register : cfunction =
     immediater "caml_c_thread_register" (void @-> returning void)
@@ -346,15 +349,19 @@ struct
     let prelude =
       [
         begin if options.use_register_thread
-          then `App (caml_c_thread_register, [])
-          else `Nop end;
+          then
+            [
+              `App (caml_thread_initialize, []);
+              `App (caml_c_thread_register, [])
+            ]
+          else [`Nop] end;
 
-        begin if options.use_runtime_system_lock
+        [begin if options.use_runtime_system_lock
           then `App (caml_acquire_runtime_system, [])
-          else `Nop end;
+          else `Nop end];
       ]
     in
-    let prelude = sequence prelude in
+    let prelude = sequence (List.flatten prelude) in
 
     let epilogue =
       [
