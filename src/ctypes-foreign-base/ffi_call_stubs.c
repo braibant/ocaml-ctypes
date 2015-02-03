@@ -8,7 +8,6 @@
 #include <errno.h>
 #include <assert.h>
 #include <string.h>
-#include <stdio.h>
 
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
@@ -340,9 +339,6 @@ value ctypes_call(value fnname, value function, value callspec_,
   int saved_errno = 0;
   if (context.runtime_lock)
   {
-    printf("release runtime lock\n");
-    fflush(stdout);
-
     caml_release_runtime_system();
   }
 
@@ -362,7 +358,6 @@ value ctypes_call(value fnname, value function, value callspec_,
 
   if (context.runtime_lock)
   {
-    printf("acquire runtime lock\n");
     caml_acquire_runtime_system();
   }
 
@@ -372,9 +367,6 @@ value ctypes_call(value fnname, value function, value callspec_,
     strcpy(buffer, String_val(fnname));
     unix_error(saved_errno, buffer, Nothing);
   }
-
-  printf("before callback\n");
-  fflush(stdout);
 
   callback_rv_buf = CTYPES_FROM_PTR(return_slot);
   CAMLreturn(caml_callback(rvreader, callback_rv_buf));
@@ -402,7 +394,6 @@ static void callback_handler(ffi_cif *cif,
 
   if (closure->context.runtime_lock)
   {
-    printf("acquire runtime lock\n");
     caml_acquire_runtime_system();
   }
 
@@ -439,9 +430,6 @@ static void callback_handler(ffi_cif *cif,
 
   if (closure->context.runtime_lock)
   {
-    printf("release runtime lock\n");
-    fflush(stdout);
-
     caml_release_runtime_system();
   }
 
